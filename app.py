@@ -31,8 +31,9 @@ st.title("백화점 소비 및 주가 분석 대시보드")
 # 사이드바에 세련된 네비게이션 메뉴 추가
 with st.sidebar:
     navigation = option_menu(
-        menu_title="메뉴",  # 메뉴 제목
+        menu_title="메뉴",
         options=[
+            "홈",
             "소비 현황",
             "방문 현황",
             "주가 현황",
@@ -40,18 +41,18 @@ with st.sidebar:
             "수익률 비교 - 방문 현황",
             "백테스팅 - 소비 현황",
             "수익률 비교 - 소비 현황",
-            "투자 인사이트 (LLM)",
-            # "Cortex Search - 투자 인사이트"
+            "투자 인사이트 (LLM)"
         ],
         icons=[
-            "wallet",          # 소비 현황: 지갑 아이콘 (소비/지출)
-            "person-walking",  # 방문 현황: 사람 이동 아이콘 (방문자)
-            "chart-line",      # 주가 현황: 주식 차트 아이콘
-            "gear",            # 백테스팅 - 방문: 설정/분석 아이콘
-            "bar-chart-fill",  # 수익률 비교 - 방문: 비교 차트 아이콘
-            "gear",            # 백테스팅 - 소비: 설정/분석 아이콘
-            "bar-chart-fill",  # 수익률 비교 - 소비: 비교 차트 아이콘
-            "robot"  # LLM (AI/로봇 아이콘)
+            "house",
+            "wallet",
+            "person-walking",
+            "building",
+            "gear",
+            "bar-chart-fill",
+            "gear",
+            "bar-chart-fill",
+            "robot"
         ],
         menu_icon="menu-button-wide",
         default_index=0,
@@ -88,6 +89,65 @@ date_range = st.sidebar.slider(
     format="YYYY-MM"
 )
 
+# 메인 화면 (홈)
+if navigation == "홈":
+    st.markdown("""
+        이 대시보드는 주요 백화점(더현대서울, 신세계_강남, 롯데백화점_본점)의 소비 패턴, 방문자 수, 주가 데이터를 분석하여 투자 인사이트를 제공합니다.\n
+        Snowflake 데이터를 기반으로 소비 및 방문 추세를 시각화하고, Arctic LLM을 활용해 백테스팅 결과를 해석합니다.\n
+        각 탭에서 소비/방문/주가 분석, 백테스팅, AI 기반 인사이트를 탐색해 보세요!
+    """)
+
+    # 백화점별 종목 리스트 (하드코딩)
+    ticker_mapping = [
+        {"TICKER": "004170", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "신세계"},
+        {"TICKER": "031430", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "신세계인터내셔날"},
+        {"TICKER": "031440", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "신세계푸드"},
+        {"TICKER": "037710", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "광주신세계"},
+        {"TICKER": "005440", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "현대그린푸드"},
+        {"TICKER": "020000", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "한섬"},
+        {"TICKER": "057050", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "현대홈쇼핑"},
+        {"TICKER": "069960", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "현대백화점"},
+        {"TICKER": "004990", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데지주"},
+        {"TICKER": "011170", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데케미칼"},
+        {"TICKER": "023530", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데쇼핑"},
+        {"TICKER": "071840", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데하이마트"}
+    ]
+
+    # 백화점별 종목 그룹화
+    shinsegae_stocks = [item for item in ticker_mapping if item["DEPARTMENT_STORE"] == "신세계_강남"]
+    hyundai_stocks = [item for item in ticker_mapping if item["DEPARTMENT_STORE"] == "더현대서울"]
+    lotte_stocks = [item for item in ticker_mapping if item["DEPARTMENT_STORE"] == "롯데백화점_본점"]
+
+    # 종목 리스트 표시
+    st.markdown("### 주요 백화점 관련 종목")
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        with st.container():
+            st.markdown(
+                f"<div style='background-color: #6db8de; padding: 10px; text-align: center;'>{shinsegae_stocks[0]['DEPARTMENT_STORE']}</div>",
+                unsafe_allow_html=True
+            )
+            for stock in shinsegae_stocks:
+                st.write(f"{stock['COMPANY_NAME']} ({stock['TICKER']})")
+
+    with col2:
+        with st.container():
+            st.markdown(
+                f"<div style='background-color: #6db8de; padding: 10px; text-align: center;'>{hyundai_stocks[0]['DEPARTMENT_STORE']}</div>",
+                unsafe_allow_html=True
+            )
+            for stock in hyundai_stocks:
+                st.write(f"{stock['COMPANY_NAME']} ({stock['TICKER']})")
+
+    with col3:
+        with st.container():
+            st.markdown(
+                f"<div style='background-color: #6db8de; padding: 10px; text-align: center;'>{lotte_stocks[0]['DEPARTMENT_STORE']}</div>",
+                unsafe_allow_html=True
+            )
+            for stock in lotte_stocks:
+                st.write(f"{stock['COMPANY_NAME']} ({stock['TICKER']})")
 # Tab 1: Consumption Status (PROCESSED schema)
 if navigation == "소비 현황":
     st.subheader("월별 소비 현황")
