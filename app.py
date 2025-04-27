@@ -26,7 +26,7 @@ def get_snowflake_data(query, params=None):
         st.error(f"Snowflake 연결/쿼리 오류: {str(e)}")
         return None
 
-st.title("백화점 소비 및 주가 분석 대시보드")
+st.title("백화점 소비/방문자 주가 분석 대시보드")
 
 # 사이드바에 세련된 네비게이션 메뉴 추가
 with st.sidebar:
