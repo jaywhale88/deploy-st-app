@@ -19,7 +19,8 @@ def get_snowflake_data(query, params=None):
             account=st.secrets["snowflake"]["account"],
             warehouse=st.secrets["snowflake"]["warehouse"],
             database=st.secrets["snowflake"]["database"],
-            schema=st.secrets["snowflake"]["schema"]
+            schema=st.secrets["snowflake"]["schema"],
+            insecure_mode=True  # OCSP 검증 비활성화
         )
         cur = conn.cursor()
         cur.execute(query, params if params else ())
