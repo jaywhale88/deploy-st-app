@@ -1,4 +1,5 @@
 import streamlit as st
+import logging
 import snowflake.connector
 import pandas as pd
 import plotly.express as px
@@ -6,6 +7,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
 from streamlit_option_menu import option_menu
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def get_snowflake_data(query, params=None):
     try:
@@ -23,6 +27,7 @@ def get_snowflake_data(query, params=None):
         conn.close()
         return df
     except Exception as e:
+        logger.error(f"Snowflake connection failed: {e}")
         st.error(f"Snowflake 연결/쿼리 오류: {str(e)}")
         return None
 
