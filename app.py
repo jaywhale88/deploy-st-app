@@ -6,6 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
+import calendar
 from streamlit_option_menu import option_menu
 
 logging.basicConfig(level=logging.DEBUG)
@@ -227,14 +228,22 @@ if navigation == "소비 현황":
 # Tab 2: Visitor Status (RAW schema)
 elif navigation == "방문 현황":
     st.subheader("월별 방문 현황")
+    # 월별 방문자 데이터를 가져오는 쿼리
+    # date_range[1]을 월 마지막 날짜로 보정
+    start_date = date_range[0]
+    end_date = date_range[1]
+    last_day = calendar.monthrange(end_date.year, end_date.month)[1]
+    end_date = end_date.replace(day=last_day)
+
     query_visits = f"""
-    SELECT
-        DATE_TRUNC('MONTH', DATE) AS YEAR_MONTH,
-        DEPARTMENT_STORE_NAME AS DEPARTMENT_STORE,
-        SUM(COUNT) AS VISITOR_COUNT
-    FROM FLOWCAST_DB.RAW.VISITS
-    WHERE DATE BETWEEN '{date_range[0].strftime('%Y-%m-%d')}' AND '{date_range[1].strftime('%Y-%m-%d')}'
-    """
+        SELECT
+            DATE_TRUNC('MONTH', DATE) AS YEAR_MONTH,
+            DEPARTMENT_STORE_NAME AS DEPARTMENT_STORE,
+            SUM(COUNT) AS VISITOR_COUNT
+        FROM FLOWCAST_DB.RAW.VISITS
+        WHERE DATE BETWEEN '{start_date.strftime('%Y-%m-%d')}' AND '{end_date.strftime('%Y-%m-%d')}'
+        """
+
     if selected_store != 'All':
         query_visits += f" AND DEPARTMENT_STORE_NAME = '{selected_store}'"
     query_visits += " GROUP BY DATE_TRUNC('MONTH', DATE), DEPARTMENT_STORE_NAME"
