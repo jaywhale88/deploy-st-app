@@ -99,7 +99,7 @@ date_range = st.sidebar.slider(
 if navigation == "홈":
     st.markdown("""
         이 대시보드는 주요 백화점(더현대서울, 신세계_강남, 롯데백화점_본점)의 소비 패턴, 방문자 수, 주가 데이터를 분석하여 투자 인사이트를 제공합니다.\n
-        Snowflake 데이터를 기반으로 소비 및 방문 추세를 시각화하고, Arctic LLM을 활용해 백테스팅 결과를 해석합니다.\n
+        Snowflake 데이터를 기반으로 소비 및 방문 추세를 시각화하고, LLM을 활용해 백테스팅 결과를 해석합니다.\n
         각 탭에서 소비/방문/주가 분석, 백테스팅, AI 기반 인사이트를 탐색해 보세요!
     """)
 
@@ -946,77 +946,92 @@ elif navigation == "수익률 비교 - 소비 현황":
     except snowflake.connector.errors.ProgrammingError as e:
         st.error(f"Snowflake 쿼리 실행 중 에러 발생: {str(e)}")
 
-elif navigation == "투자 인사이트 (LLM)":
-    st.subheader("투자 인사이트 (Arctic LLM)")
+#  LLM을 사용한 투자 인사이트
+if navigation == "투자 인사이트 (LLM)":
+    st.subheader("투자 인사이트 (LLM)")
 
-    # 대화 기록 및 캐시 초기화
+    # 채팅 기록 및 캐시 초기화
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
-    if "backtest_cache" not in st.session_state:
-        st.session_state.backtest_cache = {}
+    if "data_cache" not in st.session_state:
+        st.session_state.data_cache = {}
 
-    # 하드코딩된 티커-백화점 매핑
+    # 백화점별 티커 매핑 정의
     ticker_mapping = [
-        {"TICKER": "004170", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "신세계"},
-        {"TICKER": "004990", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데지주"},
-        {"TICKER": "005440", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "현대그린푸드"},
-        {"TICKER": "011170", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데케미칼"},
-        {"TICKER": "020000", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "한섬"},
-        {"TICKER": "023530", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데쇼핑"},
-        {"TICKER": "031430", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "신세계인터내셔날"},
-        {"TICKER": "031440", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "신세계푸드"},
-        {"TICKER": "037710", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "광주신세계"},
-        {"TICKER": "057050", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "현대홈쇼핑"},
-        {"TICKER": "069960", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "현대백화점"},
-        {"TICKER": "071840", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데하이마트"}
+        {"TICKER": "004170", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "신세계", "INDUSTRY": "소매"},
+        {"TICKER": "004990", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데지주", "INDUSTRY": "지주"},
+        {"TICKER": "005440", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "현대그린푸드", "INDUSTRY": "식품"},
+        {"TICKER": "011170", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데케미칼", "INDUSTRY": "화학"},
+        {"TICKER": "020000", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "한섬", "INDUSTRY": "패션"},
+        {"TICKER": "023530", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데쇼핑", "INDUSTRY": "소매"},
+        {"TICKER": "031430", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "신세계인터내셔날", "INDUSTRY": "패션"},
+        {"TICKER": "031440", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "신세계푸드", "INDUSTRY": "식품"},
+        {"TICKER": "037710", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "광주신세계", "INDUSTRY": "소매"},
+        {"TICKER": "057050", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "현대홈쇼핑", "INDUSTRY": "홈쇼핑"},
+        {"TICKER": "069960", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "현대백화점", "INDUSTRY": "소매"},
+        {"TICKER": "071840", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데하이마트", "INDUSTRY": "전자제품"}
     ]
+
+    # 백화점별 맥락 정의
+    store_contexts = {
+        "신세계_강남": "고급 소비 중심의 프리미엄 백화점",
+        "롯데백화점_본점": "대중적이고 다양한 소비층을 대상으로 한 백화점",
+        "더현대서울": "현대적이고 트렌디한 소비를 지향하는 백화점"
+    }
 
     # 사용자 입력
-    store = st.selectbox("백화점 선택", ["더현대서울", "신세계_강남", "롯데백화점_본점"], key="llm_store")
-
-    # 선택된 백화점에 매핑된 티커 목록
-    ticker_options = [f"{item['TICKER']} ({item['COMPANY_NAME']})" for item in ticker_mapping if
-                      item['DEPARTMENT_STORE'] == store]
-    ticker_map = {f"{item['TICKER']} ({item['COMPANY_NAME']})": item['TICKER'] for item in ticker_mapping if
-                  item['DEPARTMENT_STORE'] == store}
+    store = st.selectbox("백화점 선택", ["신세계_강남", "롯데백화점_본점", "더현대서울"], key="store")
+    ticker_options = [f"{item['TICKER']} ({item['COMPANY_NAME']})" for item in ticker_mapping if item['DEPARTMENT_STORE'] == store]
     if not ticker_options:
-        st.warning(f"{store}에 대한 티커 데이터가 없습니다. 다른 백화점을 선택해 주세요.")
-        ticker_options = []
-        ticker_map = {}
-    ticker = st.selectbox("티커 선택", ticker_options, key="llm_ticker", disabled=not ticker_options)
-    ticker_value = ticker_map.get(ticker) if ticker else None
+        st.warning(f"{store}에 대한 티커가 없습니다. 다른 백화점을 선택하세요.")
+        ticker = None
+        ticker_value = None
+    else:
+        ticker = st.selectbox("티커 선택", ticker_options, key="ticker")
+        ticker_value = ticker.split(" ")[0]  # 예: "031430"
 
-    data_type = st.radio("데이터 유형", ["소비 증가율", "방문 증가율"], key="llm_data_type")
+    data_type = st.radio("데이터 유형", ["소비 증가율", "방문 증가율"], key="data_type")
+    # date_range 처리
+    start_date = date_range[0].strftime('%Y-%m-%d') if len(date_range) > 0 else '2021-01-01'
+    end_date = date_range[1].strftime('%Y-%m-%d') if len(date_range) > 1 else '2023-12-31'
 
-    # 질문 입력 UI
-    st.markdown("**질문 입력**: 방문자/소비 증가율과 주가의 관계를 물어보세요! (예: 전체 추이, 투자 전략 등)")
+    # 회사명 및 산업 맥락
+    company_name = next((item['COMPANY_NAME'] for item in ticker_mapping if item['TICKER'] == ticker_value), "Unknown") if ticker_value else "Unknown"
+    industry_context = next((item['INDUSTRY'] for item in ticker_mapping if item['TICKER'] == ticker_value), "Unknown") if ticker_value else "Unknown"
+    store_context = store_contexts.get(store, "일반 백화점")
+
+    # 질문 입력
+    st.markdown("**질문을 입력하세요!** (예: 이 주식에 투자해야 할까?)")
     question_options = [
-        "이 티커의 전체 백테스팅 결과를 요약해서 인사이트를 알려주세요",
-        "이 티커(주식)에 투자해야 할까요?"
+        "소비/방문 트렌드와 주가 관계를 요약해줘",
+        "이 티커에 투자해야 할까?",
+        "소비 증가율이 높을 때 주가와 거래량은 어떻게 변해?"
     ]
-    selected_question = st.selectbox("추천 질문 선택 (또는 직접 입력)", [""] + question_options, key="llm_question_select")
-    user_question = st.chat_input("질문을 입력하세요...", key="llm_question") or selected_question
+    selected_question = st.selectbox("추천 질문 선택 (또는 직접 입력)", [""] + question_options, key="question_select")
+    user_question = st.chat_input("질문을 입력하세요...", key="question") or selected_question
 
-    # 대화 기록 표시
+    # 채팅 기록 표시
     for chat in st.session_state.chat_history:
         with st.chat_message(chat["role"]):
             st.markdown(chat["message"])
 
     # 질문 처리
     if user_question and ticker_value:
-        # 사용자 메시지 추가
         with st.chat_message("user"):
             st.markdown(user_question)
         st.session_state.chat_history.append({"role": "user", "message": user_question})
 
-        # 로딩 애니메이션
-        with st.spinner("Arctic LLM이 데이터를 분석 중입니다..."):
+        with st.spinner("분석 중..."):
             # 캐시 키 생성
-            cache_key = f"{store}_{ticker_value}_{data_type}"
+            cache_key = f"{store}_{ticker_value}_{data_type}_{start_date}_{end_date}"
+
+            # 캐시 확인 및 빈 캐시 제거
+            if cache_key in st.session_state.data_cache and (
+                    st.session_state.data_cache[cache_key] is None or st.session_state.data_cache[cache_key].empty):
+                del st.session_state.data_cache[cache_key]
 
             # 캐시 확인
-            if cache_key not in st.session_state.backtest_cache:
-                # 백테스팅 데이터 쿼리
+            if cache_key not in st.session_state.data_cache:
                 growth_col = 'DEPT_SPEND_GROWTH_RATE' if data_type == '소비 증가율' else 'VISITOR_GROWTH_RATE'
                 query = f"""
                     WITH Growth AS (
@@ -1025,9 +1040,9 @@ elif navigation == "투자 인사이트 (LLM)":
                             b.DEPARTMENT_STORE,
                             b.TICKER,
                             b.COMPANY_NAME,
-                            b.CLOSE_PRICE,
-                            b.VISITOR_COUNT,
                             b.DEPT_SPEND_GROWTH_RATE,
+                            b.VISITOR_COUNT,
+                            b.CLOSE_PRICE AS BUY_PRICE,
                             100 * (
                                 b.VISITOR_COUNT - LAG(b.VISITOR_COUNT) OVER (
                                     PARTITION BY b.DEPARTMENT_STORE, b.TICKER
@@ -1050,83 +1065,120 @@ elif navigation == "투자 인사이트 (LLM)":
                             g.DEPARTMENT_STORE,
                             g.TICKER,
                             g.COMPANY_NAME,
-                            g.{growth_col} AS GROWTH_RATE,
-                            g.CLOSE_PRICE AS BUY_PRICE,
-                            MAX(h.HIGH_PRICE) AS SELL_PRICE,
-                            MAX(h.TRADE_DATE) AS HIGH_PRICE_DATE
+                            g.DEPT_SPEND_GROWTH_RATE AS DEPT_SPEND_GROWTH_RATE,
+                            g.VISITOR_GROWTH_RATE AS VISITOR_GROWTH_RATE,
+                            g.BUY_PRICE,
+                            MAX(s.HIGH_PRICE) AS SELL_PRICE,
+                            AVG(s.VOLUME) AS AVG_VOLUME
                         FROM Growth g
-                        LEFT JOIN FLOWCAST_DB.RAW.STOCK_PRICES h
-                            ON g.TICKER = h.TICKER
-                            AND h.TRADE_DATE BETWEEN g.YEAR_MONTH 
-                                AND DATEADD(MONTH, 6, g.YEAR_MONTH)
-                        WHERE g.{growth_col} IS NOT NULL
+                        LEFT JOIN FLOWCAST_DB.RAW.STOCK_PRICES s
+                            ON g.TICKER = s.TICKER
+                            AND DATE_TRUNC('MONTH', s.TRADE_DATE) = g.YEAR_MONTH
+                        WHERE g.{growth_col} > 0
                         GROUP BY
                             g.YEAR_MONTH,
                             g.DEPARTMENT_STORE,
                             g.TICKER,
                             g.COMPANY_NAME,
-                            g.{growth_col},
-                            g.CLOSE_PRICE
+                            g.DEPT_SPEND_GROWTH_RATE,
+                            g.VISITOR_GROWTH_RATE,
+                            g.BUY_PRICE
                     )
                     SELECT
                         YEAR_MONTH,
                         DEPARTMENT_STORE,
                         TICKER,
                         COMPANY_NAME,
-                        GROWTH_RATE,
+                        DEPT_SPEND_GROWTH_RATE,
+                        VISITOR_GROWTH_RATE,
                         BUY_PRICE,
                         SELL_PRICE,
+                        AVG_VOLUME,
                         CASE
                             WHEN SELL_PRICE IS NOT NULL AND BUY_PRICE > 0
                             THEN 100 * (SELL_PRICE - BUY_PRICE) / BUY_PRICE
                             ELSE NULL
-                        END AS RETURN_PERCENT,
-                        HIGH_PRICE_DATE
+                        END AS RETURN_PERCENT
                     FROM Backtest
                     ORDER BY YEAR_MONTH DESC
                 """
                 params = {
                     "store": store,
                     "ticker": ticker_value,
-                    "start_date": date_range[0].strftime('%Y-%m-%d'),
-                    "end_date": date_range[1].strftime('%Y-%m-%d')
+                    "start_date": start_date,
+                    "end_date": end_date
                 }
-
-                df = get_snowflake_data(query, params=params)
-                st.session_state.backtest_cache[cache_key] = df
+                df = get_snowflake_data(query, params)
+                st.session_state.data_cache[cache_key] = df
             else:
-                df = st.session_state.backtest_cache[cache_key]
+                df = st.session_state.data_cache[cache_key]
 
             if df is not None and not df.empty:
                 # 데이터 요약
-                avg_growth = df["GROWTH_RATE"].mean()
+                avg_growth = df["DEPT_SPEND_GROWTH_RATE"].mean() if data_type == "소비 증가율" else df[
+                    "VISITOR_GROWTH_RATE"].mean()
                 avg_return = df["RETURN_PERCENT"].mean()
+                avg_volume = df["AVG_VOLUME"].mean()
                 max_return = df["RETURN_PERCENT"].max()
                 min_return = df["RETURN_PERCENT"].min()
-                # 전체 데이터 요약 표
-                st.write(f"{store} - {ticker} 백테스팅 결과 ({data_type}):")
-                df["YEAR_MONTH"] = pd.to_datetime(df["YEAR_MONTH"]).dt.strftime("%Y-%m-%d")
-                df["HIGH_PRICE_DATE"] = pd.to_datetime(df["HIGH_PRICE_DATE"]).dt.strftime("%Y-%m-%d")
-                df["GROWTH_RATE"] = df["GROWTH_RATE"].round(2)
-                df["RETURN_PERCENT"] = df["RETURN_PERCENT"].round(2)
-                st.dataframe(df)
 
-                # Arctic LLM으로 결과 설명 생성
+                # 데이터프레임 표시
+                st.write(f"{store} - {ticker} 백테스팅 결과 ({data_type} 증가 시점, {start_date} ~ {end_date}):")
+                df["YEAR_MONTH"] = pd.to_datetime(df["YEAR_MONTH"]).dt.strftime("%Y-%m-%d")
+                df["DEPT_SPEND_GROWTH_RATE"] = df["DEPT_SPEND_GROWTH_RATE"].round(2)
+                df["VISITOR_GROWTH_RATE"] = df["VISITOR_GROWTH_RATE"].round(2)
+                df["RETURN_PERCENT"] = df["RETURN_PERCENT"].round(2)
+                df["AVG_VOLUME"] = df["AVG_VOLUME"].round(0)
+                st.dataframe(
+                    df[["YEAR_MONTH", "DEPT_SPEND_GROWTH_RATE", "VISITOR_GROWTH_RATE", "BUY_PRICE", "SELL_PRICE",
+                        "RETURN_PERCENT", "AVG_VOLUME"]]
+                )
+
+                # 2021-10-01 데이터 디버깅
+                if not df.empty:
+                    df_2021_10 = df[df['YEAR_MONTH'] == '2021-10-01']
+                    if not df_2021_10.empty:
+                        st.write(
+                            f"디버깅: 2021-10-01 데이터 - 소비 증가율: {df_2021_10['DEPT_SPEND_GROWTH_RATE'].iloc[0]}%, 수익률: {df_2021_10['RETURN_PERCENT'].iloc[0]}%, 거래량: {df_2021_10['AVG_VOLUME'].iloc[0]}")
+                    else:
+                        st.write("디버깅: 2021-10-01 데이터 없음")
+
+                # 데이터프레임을 CSV로 변환
+                data_csv = df[["YEAR_MONTH", "DEPT_SPEND_GROWTH_RATE", "VISITOR_GROWTH_RATE", "RETURN_PERCENT",
+                               "AVG_VOLUME"]].to_csv(index=False)
+
+                print (data_csv)
+
+                # LLM 프롬프트
                 prompt = f"""
-                    Analyze the backtesting result for {store}'s {ticker} ({df['COMPANY_NAME'].iloc[0]}):
-                    - Overall Summary: Average {data_type} {avg_growth:.2f}%, Average Return {avg_return:.2f}%, Max Return {max_return:.2f}%, Min Return {min_return:.2f}% over the entire period.
-                    Provide insights on:
-                    - How {data_type} influenced stock returns across the entire data period.
-                    - Key trends in {data_type} and stock returns (e.g., periods of high growth and their impact).
-                    - Investment strategy based on {data_type} patterns (e.g., buy when {data_type} exceeds 5%, hold for 6 months).
-                    If the user asked a specific question, answer it: "{user_question}".
-                    If limited data is available, explain possible reasons and suggest alternative analysis.
-                    Keep the response concise, professional, and focused on stock performance trends.
+                {store}의 {ticker} ({company_name})에 대한 백테스팅 데이터를 분석하세요.  
+                - **데이터**: 아래는 {data_type}가 증가한 시점({data_type} > 0)의 월별 데이터 (CSV 형식):
+                {data_csv}
+                - **요약**: 평균 {data_type} {avg_growth:.2f}%, 평균 수익률 {avg_return:.2f}%, 최대 수익률 {max_return:.2f}%, 최소 수익률 {min_return:.2f}%, 평균 거래량 {avg_volume:.0f}.  
+                - **기간**: {start_date} ~ {end_date}.  
+                - **맥락**: {store}은 {store_context}, {company_name}은 {industry_context} 산업에 속함.  
+                - **역할**: 주식 투자 전문가로서, {data_type}가 증가한 시점에 초점을 맞춘 정량적이고 실용적인 인사이트 제공.  
+
+                **응답 구조**:  
+                1. **요약**: {data_type} 증가 시 주가 수익률의 상관관계 (예: "{data_type} 5% 이상 시 평균 수익률 X%").  
+                2. **트렌드**: {data_type}가 5% 이상 증가한 달의 수익률과 거래량 변화 (예: "2021-10-01: Y% 상승, 거래량 Z% 증가"). 데이터에 해당 월이 없으면 "조건에 맞는 데이터 없음" 명시.  
+                3. **투자 전략**: {data_type} 증가 기반 매수/매도 전략 (예: "{data_type} 3% 초과 시 매수").  
+                4. **주의점**: 데이터 한계 (예: "증가 시점 데이터만 분석")와 추가 고려 사항 (예: "{industry_context} 산업의 변동성").  
+
+                **사용자 질문**: "{user_question}"  
+                - 질문에 명확히 답변, 모호하면 {data_type} 증가 시점 데이터로 해석 (예: "투자해야 할까?" → "{data_type} 5% 이상 시 투자 권장").  
+
+                **지침**:  
+                - 각 섹션 2-3문장, 데이터에서 추출한 숫자 포함.  
+                - {industry_context}를 고려해 산업별 요인 반영.  
+                - 데이터 부족 시 다른 티커/기간 제안.  
+                - 트렌드 분석은 제공된 CSV 데이터에 기반해야 하며, 존재하지 않는 날짜/수치(예: 2021-10-01, 15.6%)는 생성 금지.  
                 """
                 explanation_query = """
-                    SELECT SNOWFLAKE.CORTEX.COMPLETE('snowflake-arctic', %(prompt)s) AS EXPLANATION
+                    SELECT SNOWFLAKE.CORTEX.COMPLETE('CLAUDE-3-5-SONNET', %(prompt)s) AS EXPLANATION
                 """
                 explanation_df = get_snowflake_data(explanation_query, params={"prompt": prompt})
+
                 if explanation_df is not None and not explanation_df.empty:
                     explanation = explanation_df["EXPLANATION"][0]
                     with st.chat_message("assistant"):
@@ -1134,127 +1186,21 @@ elif navigation == "투자 인사이트 (LLM)":
                     st.session_state.chat_history.append({"role": "assistant", "message": explanation})
                 else:
                     with st.chat_message("assistant"):
-                        st.error("Arctic LLM 호출 실패: 응답 데이터가 없습니다.")
-                        st.write("힌트: Snowflake 연결 또는 모델 활성화를 확인하세요.")
-                    st.session_state.chat_history.append({"role": "assistant", "message": "Arctic LLM 호출 실패"})
+                        st.error("분석에 실패했습니다. Snowflake 연결을 확인하세요.")
+                    st.session_state.chat_history.append({"role": "assistant", "message": "분석 실패"})
             else:
                 with st.chat_message("assistant"):
-                    st.warning(f"죄송해요! {store}의 {ticker_value}에 대한 데이터가 없어요. 다른 티커를 선택해 보세요!")
-                    debug_df = pd.DataFrame(ticker_mapping)
-                    st.write("사용 가능한 백화점 및 티커 목록:", debug_df[["DEPARTMENT_STORE", "TICKER", "COMPANY_NAME"]])
-                    st.session_state.chat_history.append(
-                        {"role": "assistant", "message": f"{store}의 {ticker_value}에 대한 데이터가 없습니다. 다른 티커를 선택해 보세요!"})
+                    st.warning(f"{store}의 {ticker_value} 데이터가 없습니다. 다른 백화점/티커를 선택하거나 기간을 조정하세요!")
+                    debug_query = """
+                        SELECT COUNT(*) AS record_count
+                        FROM FLOWCAST_DB.ANALYTICS.BACKTEST_DATA
+                        WHERE DEPARTMENT_STORE = %(store)s AND TICKER = %(ticker)s
+                            AND YEAR_MONTH BETWEEN %(start_date)s AND %(end_date)s
+                    """
+                    debug_df = get_snowflake_data(debug_query, params={"store": store, "ticker": ticker_value,
+                                                                       "start_date": start_date, "end_date": end_date})
+                    if debug_df is not None:
+                        st.write(
+                            f"디버깅: BACKTEST_DATA에 {store} 및 {ticker_value} 데이터 레코드 수: {debug_df['RECORD_COUNT'].iloc[0]}")
+                    st.session_state.chat_history.append({"role": "assistant", "message": f"{store}의없음"})
 
-# 새 탭: Cortex Search - 투자 인사이트
-# elif navigation == "Cortex Search - 투자 인사이트":
-#     st.subheader("Cortex Search - 투자 인사이트")
-#
-#     # 대화 기록 및 캐시 초기화
-#     if "cortex_chat_history" not in st.session_state:
-#         st.session_state.cortex_chat_history = []
-#     if "cortex_cache" not in st.session_state:
-#         st.session_state.cortex_cache = {}
-#
-#     # 하드코딩된 티커-백화점 매핑
-#     ticker_mapping = [
-#         {"TICKER": "004170", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "신세계"},
-#         {"TICKER": "004990", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데지주"},
-#         {"TICKER": "005440", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "현대그린푸드"},
-#         {"TICKER": "011170", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데케미칼"},
-#         {"TICKER": "020000", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "한섬"},
-#         {"TICKER": "023530", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데쇼핑"},
-#         {"TICKER": "031430", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "신세계인터내셔날"},
-#         {"TICKER": "031440", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "신세계푸드"},
-#         {"TICKER": "037710", "DEPARTMENT_STORE": "신세계_강남", "COMPANY_NAME": "광주신세계"},
-#         {"TICKER": "057050", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "현대홈쇼핑"},
-#         {"TICKER": "069960", "DEPARTMENT_STORE": "더현대서울", "COMPANY_NAME": "현대백화점"},
-#         {"TICKER": "071840", "DEPARTMENT_STORE": "롯데백화점_본점", "COMPANY_NAME": "롯데하이마트"}
-#     ]
-#
-#     # 사용자 입력
-#     store = st.selectbox("백화점 선택", ["더현대서울", "신세계_강남", "롯데백화점_본점"], key="cortex_store")
-#
-#     # 선택된 백화점에 매핑된 티커 목록
-#     ticker_options = [f"{item['TICKER']} ({item['COMPANY_NAME']})" for item in ticker_mapping if
-#                       item['DEPARTMENT_STORE'] == store]
-#     ticker_map = {f"{item['TICKER']} ({item['COMPANY_NAME']})": item['TICKER'] for item in ticker_mapping if
-#                   item['DEPARTMENT_STORE'] == store}
-#     if not ticker_options:
-#         st.warning(f"{store}에 대한 티커 데이터가 없습니다. 다른 백화점을 선택해 주세요.")
-#         ticker_options = []
-#         ticker_map = {}
-#     ticker = st.selectbox("티커 선택", ticker_options, key="cortex_ticker", disabled=not ticker_options)
-#     ticker_value = ticker_map.get(ticker) if ticker else None
-#
-#     # 질문 입력 UI
-#     st.markdown("**질문 입력**: 재무제표, 뉴스, 공시를 바탕으로 투자 인사이트를 물어보세요! (예: 재무 성과, 뉴스 요약, 투자 전략)")
-#     question_options = [
-#         "이 티커의 최근 재무제표를 요약해 주세요",
-#         "이 티커 관련 최신 뉴스와 공시를 요약해 주세요",
-#         "이 티커에 투자해야 할까요?",
-#         "이 티커의 투자 인사이트를 알려주세요",
-#         "이 백화점의 다른 티커는 어떤가요?"
-#     ]
-#     selected_question = st.selectbox("추천 질문 선택 (또는 직접 입력)", [""] + question_options, key="cortex_question_select")
-#     user_question = st.chat_input("질문을 입력하세요...", key="cortex_question") or selected_question
-#
-#     # 대화 기록 표시
-#     for chat in st.session_state.cortex_chat_history:
-#         with st.chat_message(chat["role"]):
-#             st.markdown(chat["message"])
-#
-#     # 질문 처리
-#     if user_question and ticker_value:
-#         # 사용자 메시지 추가
-#         with st.chat_message("user"):
-#             st.markdown(user_question)
-#         st.session_state.cortex_chat_history.append({"role": "user", "message": user_question})
-#
-#         # 로딩 애니메이션
-#         with st.spinner("실시간 데이터 검색 및 분석 중입니다..."):
-#             # 캐시 키 생성
-#             cache_key = f"{store}_{ticker_value}_cortex"
-#
-#             # 캐시 확인
-#             if cache_key not in st.session_state.cortex_cache:
-#                 # Grok DeepSearch로 실시간 데이터 검색 (가정: DeepSearch 활성화)
-#                 company_name = [item['COMPANY_NAME'] for item in ticker_mapping if item['TICKER'] == ticker_value][0]
-#                 financial_query = f"Latest financial statements for {company_name} ({ticker_value}) including revenue, EPS, P/E ratio"
-#                 news_query = f"Recent news and announcements for {company_name} ({ticker_value})"
-#
-#                 # DeepSearch로 검색 (실제 구현 시 API 호출 필요, 여기선 가정)
-#                 financial_results = f"Sample financial data for {company_name}: Revenue 2023: $10B, EPS: $2.5, P/E Ratio: 15"  # 실제 API 호출 대체
-#                 news_results = f"Sample news for {company_name}: New store opening announced in Q1 2024, positive market response"  # 실제 API 호출 대체
-#
-#                 st.session_state.cortex_cache[cache_key] = {"financial": financial_results, "news": news_results}
-#             else:
-#                 financial_results = st.session_state.cortex_cache[cache_key]["financial"]
-#                 news_results = st.session_state.cortex_cache[cache_key]["news"]
-#
-#             # Arctic LLM으로 요약 및 인사이트 생성
-#             prompt = f"""
-#                 Analyze the latest information for {store}'s {ticker} ({company_name}):
-#                 - Financial Summary: {financial_results}
-#                 - News/Announcements: {news_results}
-#                 Provide insights on:
-#                 - Key financial performance indicators (e.g., revenue growth, EPS, P/E ratio) and their impact on stock valuation.
-#                 - Impact of recent news or announcements on stock price potential.
-#                 - Investment strategy based on financial and news data (e.g., buy/sell timing, risk assessment).
-#                 If the user asked a specific question, answer it: "{user_question}".
-#                 If limited data is available, explain possible reasons and suggest alternative analysis.
-#                 Keep the response concise, professional, and focused on stock investment insights.
-#             """
-#             explanation_query = """
-#                 SELECT SNOWFLAKE.CORTEX.COMPLETE('snowflake-arctic', %(prompt)s) AS EXPLANATION
-#             """
-#             explanation_df = get_snowflake_data(explanation_query, params={"prompt": prompt})
-#             if explanation_df is not None and not explanation_df.empty:
-#                 explanation = explanation_df["EXPLANATION"][0]
-#                 with st.chat_message("assistant"):
-#                     st.markdown(explanation)
-#                 st.session_state.cortex_chat_history.append({"role": "assistant", "message": explanation})
-#             else:
-#                 with st.chat_message("assistant"):
-#                     st.error("Arctic LLM 호출 실패: 응답 데이터가 없습니다.")
-#                     st.write("힌트: Snowflake 계정에서 SNOWFLAKE.CORTEX.COMPLETE 함수 활성화를 확인하세요.")
-#                 st.session_state.cortex_chat_history.append({"role": "assistant", "message": "Arctic LLM 호출 실패"})
