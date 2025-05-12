@@ -220,29 +220,6 @@ if navigation == "소비 현황":
         )
         st.plotly_chart(fig1)
 
-        if selected_store != 'All':
-            fig2 = px.line(
-                df_consumption,
-                x='YEAR_MONTH',
-                y='DEPT_SPEND_GROWTH_RATE',
-                title=f'{selected_store} 소비 증가율 추세'
-            )
-        else:
-            fig2 = px.line(
-                df_consumption,
-                x='YEAR_MONTH',
-                y='DEPT_SPEND_GROWTH_RATE',
-                color='DEPARTMENT_STORE',
-                title='백화점별 소비 증가율 추세'
-            )
-        fig2.update_layout(
-            yaxis_title='소비 증가율 (%)',
-            legend_title='백화점'
-        )
-        st.plotly_chart(fig2)
-    else:
-        st.warning("소비 데이터를 로드할 수 없거나 데이터가 없습니다.")
-
 # Tab 2: Visitor Status (RAW schema)
 elif navigation == "방문 현황":
     st.subheader("월별 방문 현황")
