@@ -12,7 +12,7 @@ from streamlit_option_menu import option_menu
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-def get_snowflake_data(query, params=None):
+def init_snowflake_connection():
     try:
         conn = snowflake.connector.connect(
             user=st.secrets["snowflake"]["user"],
@@ -21,16 +21,34 @@ def get_snowflake_data(query, params=None):
             warehouse=st.secrets["snowflake"]["warehouse"],
             database=st.secrets["snowflake"]["database"],
             schema=st.secrets["snowflake"]["schema"],
-            insecure_mode=True  # OCSP 검증 비활성화
+            insecure_mode=True,  # OCSP 검증 비활성화
+            role='ANALYST'
         )
-        cur = conn.cursor()
+        return conn
+    except Exception as e:
+        st.error(f"Snowflake 연결 초기화 오류: {str(e)}")
+        return None
+
+# 연결 객체를 세션 상태에 저장
+if 'snowflake_conn' not in st.session_state or st.session_state.snowflake_conn is None:
+    st.session_state.snowflake_conn = init_snowflake_connection()
+
+# Snowflake 쿼리 실행 함수
+def get_snowflake_data(query, params=None):
+    try:
+        if st.session_state.snowflake_conn is None:
+            st.error("Snowflake 연결이 초기화되지 않았습니다. 재시도 중...")
+            st.session_state.snowflake_conn = init_snowflake_connection()
+            if st.session_state.snowflake_conn is None:
+                return None
+        cur = st.session_state.snowflake_conn.cursor()
         cur.execute(query, params if params else ())
         df = cur.fetch_pandas_all()
-        conn.close()
         return df
     except Exception as e:
-        logger.error(f"Snowflake connection failed: {e}")
-        st.error(f"Snowflake 연결/쿼리 오류: {str(e)}")
+        st.error(f"Snowflake 쿼리 오류: {str(e)}")
+        # 연결 오류 시 재초기화
+        st.session_state.snowflake_conn = init_snowflake_connection()
         return None
 
 st.title("백화점 소비/방문자 주가 분석 대시보드")
