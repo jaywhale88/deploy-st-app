@@ -1007,7 +1007,6 @@ if navigation == "투자 인사이트 (LLM)":
     # 질문 입력
     st.markdown("**질문을 입력하세요!** (예: 이 주식에 투자해야 할까?)")
     question_options = [
-        "소비/방문 트렌드와 주가 관계를 요약해줘",
         "이 티커에 투자해야 할까?",
         "소비 증가율이 높을 때 주가와 거래량은 어떻게 변해?"
     ]
@@ -1138,14 +1137,14 @@ if navigation == "투자 인사이트 (LLM)":
                         "RETURN_PERCENT", "AVG_VOLUME"]]
                 )
 
-                # 2021-10-01 데이터 디버깅
-                if not df.empty:
-                    df_2021_10 = df[df['YEAR_MONTH'] == '2021-10-01']
-                    if not df_2021_10.empty:
-                        st.write(
-                            f"디버깅: 2021-10-01 데이터 - 소비 증가율: {df_2021_10['DEPT_SPEND_GROWTH_RATE'].iloc[0]}%, 수익률: {df_2021_10['RETURN_PERCENT'].iloc[0]}%, 거래량: {df_2021_10['AVG_VOLUME'].iloc[0]}")
-                    else:
-                        st.write("디버깅: 2021-10-01 데이터 없음")
+                # # 2021-10-01 데이터 디버깅
+                # if not df.empty:
+                #     df_2021_10 = df[df['YEAR_MONTH'] == '2021-10-01']
+                #     if not df_2021_10.empty:
+                #         st.write(
+                #             f"디버깅: 2021-10-01 데이터 - 소비 증가율: {df_2021_10['DEPT_SPEND_GROWTH_RATE'].iloc[0]}%, 수익률: {df_2021_10['RETURN_PERCENT'].iloc[0]}%, 거래량: {df_2021_10['AVG_VOLUME'].iloc[0]}")
+                #     else:
+                #         st.write("디버깅: 2021-10-01 데이터 없음")
 
                 # 데이터프레임을 CSV로 변환
                 data_csv = df[["YEAR_MONTH", "DEPT_SPEND_GROWTH_RATE", "VISITOR_GROWTH_RATE", "RETURN_PERCENT",
